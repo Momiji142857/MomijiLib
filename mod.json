@@ -1,15 +1,15 @@
 {
-  "name": "momiji_crafter_lib",
-  "displayName": "MomijiCrafterLib",
-  "author": "[sky[]]Momiji142857[white[]] (with DeepSeek)",
-  "version": "1.4",
+  "name": "momiji-lib",
+  "displayName": "MomijiLib",
+  "author": "[sky[]]Momiji142857[white[]]",
+  "version": "1.5",
   "minGameVersion": "159",
 
-  "subtitle": "MomijiCrafterLib\n磨米机库示例",
-  "description": "An example mod that demonstrates how to use the MultiCrafterLib library.\n展示一下我拼的工厂uwu",
-
+  "subtitle": "MomijiLib\n磨米机库",
+  "description": "磨米机库.\n2026-10-04",
   "hidden": false,
+  "repo": "Momiji142857/MomijiCrafterLib",
+
   "java": true,
-  "main": "momiji.LibMod",
-  "repo": "Momiji142857/MomijiCrafterLib"
+  "main": "momijiLib.LibLoad"
 }

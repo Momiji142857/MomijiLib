@@ -1,0 +1,338 @@
+{
+  "type": "hover",
+  "hovering": true,
+  "health": 9000,
+  "armor": 10,
+  "rotateSpeed": 2,
+  "speed": 1.5,
+  "accel": 0.04,
+  "drag": 0.04,
+  "hitSize": 45,
+  "lowAltitude": true,
+  "itemCapacity": 160,
+  "shadowElevation": 0.2,
+  "useEngineElevation": false,
+  "engineSize": 4,
+  "engineOffset": 22,
+  "groundLayer": 70,
+  "fogRadius": 240,
+  "strafePenalty": 1,
+  "maxRange": 520,
+  "canDrown": false,
+  "lightColor": "90dbff",
+  "researchCostMultiplier": 0.05,
+  "loopSound": "loopHover",
+  "loopSoundVolume": 0.6,
+  "immunities": [ "burning", "wet", "tarred" ],
+  "targetFlags": [ "drill", "battery", "reactor", "repair", "storage" ],
+  "engines": [
+    { "x": 4.5, "y": -19.5, "rotation": -70, "radius": 3 },
+    { "x": -4.5, "y": -19.5, "rotation": -110, "radius": 3 }
+  ],
+  "abilities": [
+    {
+      "type": "EnergyFieldAbility",
+      "damage": 20,
+      "range": 128,
+      "reload": 30,
+      "healEffect": "none",
+      "status": "wet",
+      "shootSound": "none",
+      "statusDuration": 1200,
+      "x": 0,
+      "y": 0,
+      "targetAir": true,
+      "targetGround": false,
+      "maxTargets": 1024,
+      "healPercent": 0.1,
+      "displayHeal": false,
+      "effectRadius": 0,
+      "color": "90dbff",
+      "rotateSpeed": -7.5,
+      "sectors": 2,
+      "sectorRad": 0.2,
+      "hitBuildings": false
+    }
+  ],
+  "parts": [
+    {
+      "type": "HoverPart",
+      "x": 18.5,
+      "y": -18.5,
+      "mirror": true,
+      "radius": 13,
+      "phase": 65,
+      "stroke": 4,
+      "minStroke": 0,
+      "layerOffset": -0.001,
+      "color": "90dbff",
+      "sides": 4,
+      "rotation": 45
+    },
+    {
+      "type": "HoverPart",
+      "x": 14,
+      "y": 16,
+      "mirror": true,
+      "radius": 7,
+      "phase": 65,
+      "stroke": 2.5,
+      "minStroke": 0,
+      "layerOffset": -0.001,
+      "color": "90dbff",
+      "sides": 4
+    },
+    {
+      "type": "HaloPart",
+      "x": 0,
+      "y": 0,
+      "mirror": false,
+      "color": "90dbff",
+      "shapes": 2,
+      "radius": 2,
+      "tri": true,
+      "triLength": 5.5,
+      "triLengthTo": 0,
+      "haloRadius": 4.9,
+      "haloRadiusTo": 3,
+      "haloRotateSpeed": -2.5,
+      "shapeRotation": 70,
+      "layer": 110,
+      "rotateSpeed": 0
+    },
+    {
+      "type": "HaloPart",
+      "x": 0,
+      "y": 0,
+      "mirror": false,
+      "color": "90dbff",
+      "shapes": 2,
+      "radius": 2,
+      "tri": true,
+      "triLength": 0,
+      "triLengthTo": 5.5,
+      "haloRadius": 3,
+      "haloRadiusTo": 4.9,
+      "haloRotateSpeed": -7.5,
+      "shapeRotation": 70,
+      "layer": 110,
+      "rotateSpeed": 0
+    },
+    {
+      "type": "ShapePart",
+      "circle": true,
+      "x": 0,
+      "y": 0,
+      "mirror": false,
+      "layer": 110,
+      "color": "90dbff",
+      "radius": 4,
+      "hollow": true,
+      "stroke": 3.5,
+      "strokeTo": 4
+    },
+    {
+      "type": "RegionPart",
+      "x": 0,
+      "y": 0,
+      "name": "testUnit-glow",
+      "color": "90dbffaa",
+      "mixColor": "90dbffaa",
+      "outline": false,
+      "blending": "additive",
+      "layerOffset": 0.001
+    }
+  ],
+  "weapons": [
+    {
+      "mirror": false,
+      "x": 0,
+      "y": 0,
+      "minWarmup": 2,
+      "useAttackRange": false,
+      "display": false
+    },
+    {
+      "type": "StatefulWeapon",
+      "name": "testUnit-gatling",
+      "x": 14,
+      "y": -5,
+      "cooldownTime": 300,
+      "reload": 2,
+      "shootY": 22.5,
+      "rotateSpeed": 2,
+      "rotate": true,
+      "rotationLimit": 90,
+      "ejectEffect": "casing2",
+      "soundPitchMin": 0.9,
+      "soundPitchMax": 1,
+      "shootSound": "shoot",
+      "shootSoundVolume": 1,
+      "layerOffset": 0.01,
+      "shake": 2,
+      "recoil": 0,
+      "recoilTime": 60,
+      "top": true,
+      "shootCone": 361,
+      "inaccuracy": 1,
+      "alternate": false,
+      "shadow": 20,
+      "linearWarmup": true,
+      "shootWarmupSpeed": 0.001,
+      "velocityRnd": 0.1,
+
+      "parts": [
+        {
+          "type": "TubePart",
+          "suffix": "-tube",
+          "tubeCount": 3,
+          "reload": 4,
+          "clampProgress": false,
+          "heatProgress": "warmup",
+          "layerOffset": -0.001,
+          "x": 0, "y": 0,
+          "moveX": 1.5, "moveY": 0,
+          "color": "bbbbbb",
+          "colorTo": "ffffff",
+          "under": true
+        }
+      ],
+
+      "bullet": {
+        "damage": 29,
+        "speed": 13,
+        "height": 20,
+        "width": 6,
+        "shrinkY": 0,
+        "frontColor": "ffffff",
+        "backColor": "90dbff",
+        "hitColor": "90dbff",
+        "lightColor": "90dbff",
+        "shieldDamageMultiplier": 1.5,
+        "buildingDamageMultiplier": 1.4,
+        "hitEffect": {
+          "type": "MultiEffect",
+          "effects": [
+            "hitBulletColor",
+            {
+              "type": "WaveEffect",
+              "lightColor": "90dbff",
+              "colorTo": "90dbff",
+              "sizeTo": 24,
+              "sides": 4,
+              "strokeFrom": 4,
+              "lifetime": 5
+            }
+          ]
+        },
+        "status": "wet",
+        "statusDuration": 180,
+        "despawnEffect": "hitBulletColor",
+        "shootEffect": "shootBigColor",
+        "smokeEffect": "colorSpark",
+        "knockback": 4,
+        "pierceCap": 3,
+        "pierce": true,
+        "pierceBuilding": false,
+        "pierceArmor": true,
+        "impact": true,
+        "lifetime": 36,
+        "maxRange": 468,
+        "rangeOverride": 468
+      }
+    },
+    {
+      "shootWarmupSpeed": 0.001,
+      "minWarmup": 0.99,
+      "linearWarmup": true,
+      "initialShootSound": "none",
+      "shootSound": "shoot",
+      "shootSoundVolume": 1.2,
+      "alternate": false,
+      "reload": 30,
+      "shootStatus": "disarmed",
+      "shootStatusDuration": 420,
+      "shootCone": 361,
+      "x": 14, "y": -5,
+      "shootY": 17.5,
+      "rotateSpeed": 2,
+      "rotate": true,
+      "rotationLimit": 90,
+      "soundPitchMin": 1,
+      "soundPitchMax": 1,
+      "display": false,
+      "useAttackRange": false,
+      "parts": [
+        {
+          "type": "EffectSpawnerPart",
+          "progress": {
+            "type": "warmup",
+            "ops": [
+              { "op": "mul", "other": "warmup" },
+              { "op": "mul", "other": "warmup" },
+              { "op": "add", "other": "reload" }
+            ]
+          },
+          "effect": "fuelburn",
+          "width": 5.5,
+          "height": 12.5,
+          "y": 12.75,
+          "effectChance": 0.25
+        }
+      ],
+      "bullet": {
+        "type": "ContinuousBulletType",
+        "length": 0,
+        "lifetime": 420,
+        "damage": 0,
+        "maxRange": 468,
+        "hitEffect": "none",
+        "smokeEffect": "smokeCloud"
+      }
+    },
+    {
+      "name": "testUnit-missile-weapon",
+      "x": 8.75, "y": -15,
+      "mirror": true,
+      "rotate": true,
+      "rotateSpeed": 5,
+      "top": false,
+      "reload": 600,
+      "recoil": 0,
+      "shootSound": "shootHorizon",
+      "predictTarget": false,
+      "useAttackRange": false,
+      "bullet": {
+        "speed": 999,
+        "spawnUnit": "hurricaneMissile",
+        "rangeOverride": 520,
+        "shootEffect": {
+          "type": "WaveEffect",
+          "lightColor": "90dbff",
+          "colorTo": "90dbff",
+          "sizeTo": 24,
+          "sides": 4,
+          "strokeFrom": 4,
+          "lifetime": 15
+        },
+        "smokeEffect": "none"
+      },
+      "parts": [
+        {
+          "type": "RegionPart",
+          "name": "testUnit-missile-weapon-missile",
+          "color": "ffffff",
+          "colorTo": "ffffff00",
+          "progress": {
+            "type": "reload",
+            "ops": [
+              { "op": "mul", "amount": 3 },
+              { "op": "add", "amount": 0 }
+            ]
+          },
+          "under": false
+        }
+      ]
+    }
+  ]
+}
