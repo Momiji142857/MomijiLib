@@ -2,13 +2,13 @@
   "name": "momiji-lib",
   "displayName": "MomijiLib",
   "author": "[sky[]]Momiji142857[white[]]",
-  "version": "1.5",
+  "version": "1.7.0",
   "minGameVersion": "159",
 
   "subtitle": "MomijiLib\n磨米机库",
-  "description": "磨米机库.\n2026-10-04",
+  "description": "磨米机库.\n2026-10-17",
   "hidden": false,
-  "repo": "Momiji142857/MomijiCrafterLib",
+  "repo": "Momiji142857/MomijiLib",
 
   "java": true,
   "main": "momijiLib.LibLoad"

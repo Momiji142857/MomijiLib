@@ -186,7 +186,6 @@
           "type": "TubePart",
           "suffix": "-tube",
           "tubeCount": 2,
-          "reload": 4,
           "clampProgress": false,
           "heatProgress": "warmup",
           "layerOffset": -0.001,

@@ -1,6 +1,6 @@
-# MomijiCrafterLib
+# MomijiLib
 
-为 Mindustry Java 模组作者提供的多功能工厂方块库，可通过 JSON 配置快速使用。
+为 Mindustry 模组作者提供的多功能工厂方块库，可通过 JSON 配置快速使用。
 
 ## 现有方块
 
@@ -26,9 +26,8 @@
 - EVE还是太强大了uwu
 - 感谢群友 Ls 的库, 主要思路就是这样来的
 - 还有其他群的群u和ai鼎力相助, 非常感谢uwu
-- json使用时看包里的json示例, java使用时看包里的java示例
 - 有事可以可以加qq: 1945542457
-- 社恐可以加[ve模组](https://github.com/Martian238/Vanilla-Expansion-Mod)的群: 624367215
+- 社恐可以加[ve模组](https://github.com/Martian238/Vanilla-Expansion-Mod)的群: 1090802935
 
 ## 许可
 

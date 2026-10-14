@@ -1,14 +1,35 @@
 package momijiLib.entities.part;
 
 import arc.math.Mathf;
+import arc.struct.ObjectMap;
+import arc.struct.Seq;
 import arc.util.Log;
 import arc.util.Nullable;
+import arc.util.Time;
+import mindustry.entities.part.RegionPart;
+import mindustry.gen.Unit;
+
+import java.lang.ref.WeakReference;
 
 /**
- * 可展开为多根旋转炮管的 {@link #RegionPart}.<p>
- * 通过 {@link tubeCount} 设定炮管数量.<p>
- * 通过 {@link reload} 计算炮管旋转速度, 一般与所属 Weapon.reload 保持一致.<p>
- * {@link tubeCount} <= 0 时时退化为普通的 {@link StatefulRegionPart}.
+ * 可展开为多根旋转炮管的 {@link StatefulRegionPart}.<p>
+ * 通过 {@link tubeCount} 设定炮管数量, 展开后的炮管以 base 的 (x, y) 为中心均匀分布,
+ * 每根炮管的相位均分一圈.<p>
+ * 把炮管组的旋转看作竖直平面上的圆(竖直分量 sin, 纵深分量 cos):
+ * <ul>
+ *     <li>竖直分量 sin 表现为沿 {@link RegionPart#moveX} 的往复位移, 即与中间位置的偏移量</li>
+ *     <li>纵深分量 cos 表现为图层与明暗 —— 转到最前的炮管画在最上层且颜色最亮,
+ *         转到最后的被压在下面且最暗, 处于最高/最低点时两者都是中间值</li>
+ * </ul>
+ * {@link #depthFactor} 与 {@link #shadeAmount} 取负值即可整体翻转前后方向.<p>
+ * 转速为连续值: 转速系数由 {@link #spinUpSpeed} 与 {@link #spinDownSpeed} 分别按指数逼近 1 和 0,
+ * 因此开火时从慢到快、停火时逐渐停止, 两个速率均与武器预热速度无关, 可 json 配置.<p>
+ * 每圈耗时默认按武器属性推导: {@code tubeCount * 每发间隔}, 即每发子弹恰好前进一根炮管;
+ * 设为 {@link #spinTime} > 0 可手动覆盖.<p>
+ * 相位以 Unit 为 key 存储, 因此 mirror 武器的左右两侧共用同一份状态(同步旋转),
+ * 且与其他部件的相位互不影响; 各部件实例以弱引用登记, 需要在入口类中把
+ * {@link #clearAll()} 注册到世界加载/重置事件, 以便切换地图时立刻释放上一个世界的残留状态.<p>
+ * {@link #tubeCount} <= 0 时退化为普通的 {@link StatefulRegionPart}.
  *
  * @author Momiji142857 (with DeepSeek)
  * @see StatefulRegionPart
@@ -16,102 +37,196 @@ import arc.util.Nullable;
  */
 public class TubePart extends StatefulRegionPart{
 
-    /** 炮管旋转速度同步系数, 理论推导为 PI2 / (reload * count), 实测需再除以此系数才能与射击频率同步 */
-    private static final float rotationSyncFactor = 4f;
-
     /** 旋转炮管数量, >0 时在 load 中展开, <=0 时作为普通 StatefulRegionPart */
     public int tubeCount = 0;
 
-    /** 武器 reload, 用于计算炮管旋转速度, 一般与所属 Weapon.reload 保持一致 */
-    public float reload = 1f;
+    /** 转一整圈所需的 tick 数, <=0 时按武器属性自动推导 */
+    public float spinTime = -1f;
+
+    /** 转速加速速率, 指数逼近: 数值越大加速越快, 约 1/spinUpSpeed tick 达到目标转速的 63% */
+    public float spinUpSpeed = 0.15f;
+
+    /** 转速减速速率, 指数逼近: 数值越大减速越快 */
+    public float spinDownSpeed = 0.05f;
+
+    /** 图层通道幅度, 表现纵深差 (最前/最后), 取负值可翻转前后 */
+    public float depthFactor = 0.0005f;
+
+    /** 颜色通道幅度, 0 时颜色恒为 color 与 colorTo 的中间值, 0.5 时在两者之间完整渐变, 取负值可翻转前后 */
+    public float shadeAmount = 0.5f;
+
+    /** 展开出的炮管数量上限, 超过时仅警告 */
+    private static final int maxTubeCount = 32;
+
+    /** 状态清理间隔 (tick) */
+    private static final float cleanInterval = 300f;
+
+    /** 状态过期时间 (tick), 超过此时长未更新的单位视为已消失 */
+    private static final float staleTime = 60f;
+
+    /** 已创建的部件实例(弱引用), 供 {@link #clearAll()} 在世界切换时遍历; 弱引用保证 mod 重载后旧实例仍可被回收 */
+    private static final Seq<WeakReference<TubePart>> instances = new Seq<>();
+
+    /** 每单位独立的旋转状态 */
+    private static class SpinState{
+        float phase = 0f;
+        float spin = 0f;
+        float lastTick = -1f;
+        float lastSeen = 0f;
+    }
+
+    /** 以 Unit 为 key 的旋转状态 */
+    private final ObjectMap<Unit, SpinState> states = new ObjectMap<>();
+
+    /** 当前绘制单位对应的相位, 由 {@link #draw} 写入, 供相位源读取 */
+    private float cachedPhase = 0f;
 
     /** 展开后的炮管数组, tubeCount<=0 时为 null */
     private @Nullable StatefulRegionPart[] tubes;
 
+    /** 上次清理状态的时刻 */
+    private float lastClean = 0f;
+
     public TubePart(String suffix){
         super(suffix);
+        instances.add(new WeakReference<>(this));
     }
 
     public TubePart(){
         super();
+        instances.add(new WeakReference<>(this));
+    }
+
+    /**
+     * 清空所有部件实例的每单位状态, 并剔除已被回收的实例引用.<p>
+     * 需要在入口类中注册到 {@code EventType.WorldLoadEvent} 与 {@code EventType.ResetEvent},
+     * 使切换地图/返回菜单时立刻释放上一个世界的残留状态:
+     * <pre>
+     * Events.on(EventType.WorldLoadEvent.class, e -> TubePart.clearAll());
+     * Events.on(EventType.ResetEvent.class, e -> TubePart.clearAll());
+     * </pre>
+     */
+    public static void clearAll(){
+        var iter = instances.iterator();
+        while(iter.hasNext()){
+            TubePart part = iter.next().get();
+            if(part == null){
+                //已回收的旧实例(例如 mod 重载后), 顺手剔除
+                iter.remove();
+            }else{
+                part.states.clear();
+            }
+        }
     }
 
     @Override
     public void load(String name){
         super.load(name);
-        if(tubeCount > 0){
-            tubes = buildTubes(tubeCount, this, reload);
-            for(var tube : tubes){
-                tube.load(name);
+
+        if(tubeCount <= 0){
+            tubes = null;
+            return;
+        }
+
+        if(tubeCount > maxTubeCount){
+            Log.warn("[TubePart] tubeCount @ exceeds @, drawing may be expensive.", tubeCount, maxTubeCount);
+        }
+
+        tubes = buildTubes();
+
+        //炮管与 base 使用同一 name 加载, 直接共享区域引用, 避免重复查找图集
+        for(var tube : tubes){
+            tube.turretShading = turretShading;
+            tube.regions = regions;
+            tube.outlines = outlines;
+            tube.heat = heat;
+            tube.light = light;
+        }
+    }
+
+    @Override
+    public void updateState(Unit unit, boolean firing, float shotInterval, float delta){
+        if(tubeCount <= 0 || unit == null || !unit.isAdded()) return;
+
+        SpinState state = states.get(unit);
+        if(state == null){
+            state = new SpinState();
+            states.put(unit, state);
+        }
+
+        //mirror 武器的两侧 mount 都会调用到本方法, 同一 tick 内只推进一次
+        if(state.lastTick == Time.time) return;
+        state.lastTick = Time.time;
+        state.lastSeen = Time.time;
+
+        //转速系数 0~1: 开火时按 spinUpSpeed 加速, 停火时按 spinDownSpeed 减速
+        float target = firing ? 1f : 0f;
+        state.spin = Mathf.lerpDelta(state.spin, target, target > state.spin ? spinUpSpeed : spinDownSpeed);
+
+        float spin = Mathf.PI2 / totalSpinTime(shotInterval);
+        state.phase = Mathf.mod(state.phase + spin * state.spin * delta, Mathf.PI2);
+
+        if(Time.time - lastClean >= cleanInterval){
+            lastClean = Time.time;
+            var iter = states.iterator();
+            while(iter.hasNext()){
+                if(Time.time - iter.next().value.lastSeen > staleTime) iter.remove();
             }
         }
     }
 
     @Override
     public void draw(PartParams params){
-        if(tubes != null){
-            for(var tube : tubes){
-                tube.draw(params);
-            }
-        }else{
+        if(tubes == null){
             super.draw(params);
+            return;
         }
-    }
 
-    @Override
-    public void cleanDeadUnits(){
-        super.cleanDeadUnits();
-        if(tubes != null){
-            for(var tube : tubes){
-                tube.cleanDeadUnits();
-            }
+        SpinState state = currentUnit == null ? null : states.get(currentUnit);
+        cachedPhase = state == null ? 0f : state.phase;
+
+        for(var tube : tubes){
+            tube.draw(params);
         }
     }
 
     /**
-     * 创建一组旋转炮管, 旋转速度与射击间隔同步.<p>
-     * 开火时每根炮管旋转一周的时间 = reload * count ticks, 每次射击时下一根炮管恰好转到当前位置.<p>
-     * base 中仅有部分外观参数生效, 详见 {@link StatefulRegionPart#copy()}.<p>
-     * speedFunc, progress, layerProgress, colorProgress 由本方法自动覆写.
+     * 转一整圈所需的 tick 数.<p>
+     * {@link #spinTime} > 0 时使用手动值, 否则按武器属性推导:
+     * {@code tubeCount * shotInterval}, 即每发子弹前进一根炮管.
      *
-     * @param count  炮管数量, 有效范围 1~9, 超出时返回仅含 base 的单元素数组并在日志输出警告
-     * @param base   炮管基础配置, 部分参数生效
-     * @param reload 武器 reload, 用于计算旋转速度
-     * @return 炮管数组, 首元素为累加器 master, 其余为只读 children
+     * @param shotInterval 该武器每发子弹之间的间隔 (tick)
      */
-    public static StatefulRegionPart[] buildTubes(int count, StatefulRegionPart base, float reload){
-        if(count < 1 || count > 9){
-            Log.warn("[TubePart] buildTubes: count must be in range [1, 9], got @. Returning base unchanged.", count);
-            return new StatefulRegionPart[] {base};
-        }
+    public float totalSpinTime(float shotInterval){
+        return spinTime > 0f ? spinTime : Math.max(1f, shotInterval * Math.max(1, tubeCount));
+    }
 
-        StatefulRegionPart[] tubes = new StatefulRegionPart[count];
-
-        float speed = Mathf.PI2 / (reload * count) / rotationSyncFactor;
-        PartProgress masterAcc = null;
+    /** 按 tubeCount 展开炮管, 每根炮管的相位均分一圈 */
+    private StatefulRegionPart[] buildTubes(){
+        int count = Math.max(1, tubeCount);
+        StatefulRegionPart[] out = new StatefulRegionPart[count];
+        PartProgress phase = p -> cachedPhase;
+        float step = Mathf.PI2 / count;
 
         for(int i = 0; i < count; i++){
-            float phase = i * Mathf.PI2 / count;
-            tubes[i] = base.copy();
+            StatefulRegionPart tube = copy();
+            PartProgress angle = phase.add(i * step);
+            //竖直平面上的圆: 竖直分量表现为位移, 纵深分量表现为图层与明暗
+            PartProgress vertical = MomijiPartProgress.sinOf(angle);
+            PartProgress depth = MomijiPartProgress.cosOf(angle);
 
-            PartProgress acc;
-            if(i == 0){
-                //master: 带累加器, 转速受 heat 控制, 开火全速停火衰减
-                tubes[i].speedFunc = PartProgress.heat.min(PartProgress.constant(0.9f))  // heat 上限 0.9, 避免开火瞬间波动
-                                                      .mul(speed / 0.9f);
-                tubes[i].modAmount = Mathf.PI2;
-                acc = tubes[i].accumulator;
-                masterAcc = acc;
-            }else{
-                //children: 共享 master 累加器, 各自偏移相位
-                acc = masterAcc.add(phase);
-            }
-
-            //旋转位移与层级/颜色渐变基于同一个相位源
-            tubes[i].progress = MomijiPartProgress.sinOf(acc);
-            tubes[i].layerProgress = MomijiPartProgress.cosOf(acc).mul(0.0005f);
-            tubes[i].colorProgress = MomijiPartProgress.cosOf(acc).mul(0.5f).add(0.5f);
+            //sin/cos 会产生负值, 必须关闭 clamp (RegionPart 默认开启), 否则只剩半个圆
+            tube.clampProgress = false;
+            //展开后每根炮管是独立个体, 不再左右镜像, 否则每根都会绘制两遍
+            tube.mirror = false;
+            //竖直分量: 与中间位置的偏移量
+            tube.progress = vertical;
+            //纵深分量: 转到最前的炮管画在最上层, 转到最后的被压在下面
+            tube.layerProgress = depth.mul(depthFactor);
+            //纵深分量: 最前最亮, 最后最暗
+            tube.colorProgress = depth.mul(-shadeAmount).add(0.5f);
+            out[i] = tube;
         }
-        return tubes;
+        return out;
     }
 }

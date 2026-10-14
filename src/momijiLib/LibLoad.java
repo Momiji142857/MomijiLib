@@ -1,6 +1,9 @@
 package momijiLib;
 
+import arc.Events;
 import arc.util.Log;
+import mindustry.Vars;
+import mindustry.game.EventType;
 import mindustry.mod.ClassMap;
 import mindustry.mod.Mod;
 import momijiLib.entities.part.StatefulRegionPart;
@@ -15,15 +18,26 @@ import momijiLib.type.world.blocks.storage.LinkedBlock;
 
 public class LibLoad extends Mod{
 
-    //是否启用测试内容.
+    /** 是否启用测试内容. */
     public boolean test = false;
 
-    public static String addModName(String add){
-        return "momiji-lib" + "-" + add;
+    /** 模组内部名, 用于内容名前缀与日志标签 */
+    public static String modName(){
+        return Vars.mods.getMod(LibLoad.class).name;
     }
 
-    public LibLoad(){
-        Log.info("Loaded MomijiLib constructor.");
+    public static String addModName(String add){
+        return modName() + "-" + add;
+    }
+
+    @Override
+    public void init(){
+        var mod = Vars.mods.getMod(LibLoad.class);
+        Log.info("[@, v@] Initialized.", mod.name, mod.meta.version);
+
+        //切换地图/返回菜单时清空旋转炮管的残留状态
+        Events.on(EventType.WorldLoadEvent.class, e -> TubePart.clearAll());
+        Events.on(EventType.ResetEvent.class, e -> TubePart.clearAll());
     }
 
     @Override

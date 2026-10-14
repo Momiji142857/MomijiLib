@@ -24,10 +24,12 @@ public class MomijiPartProgress{
 
     /**
      * 与内置的 {@code PartProgress.sin()} 不同, 允许使用任意 PartProgress 作为相位源.<p>
-     * 数学形式: {@code output = sin(source / scl) * mag}
+     * 数学形式: {@code output = sin(source / scl) * mag}.<p>
+     * 注意 scl 是弧度除数而非周期: 相位源以弧度为单位时应使用默认值 scl = 1f,
+     * 此时输出周期为 2π; 一般地输出周期为 2π * scl.
      *
-     * @param source 相位源
-     * @param scl    周期
+     * @param source 相位源, 以弧度为单位
+     * @param scl    弧度除数, 1f 时输出周期为 2π
      * @param mag    振幅
      * @return 正弦波 Progress, 输出范围 [-mag, mag]
      */
@@ -36,8 +38,8 @@ public class MomijiPartProgress{
     }
 
     /**
-     * 默认周期 1f, 振幅 1f 的 {@link #sinOf(DrawPart.PartProgress, float, float)}.<p>
-     * 等价于 {@code sinOf(source, 1f, 1f)}, 输出范围 [-1, 1].
+     * 默认弧度除数 1f, 振幅 1f 的 {@link #sinOf(DrawPart.PartProgress, float, float)}.<p>
+     * 等价于 {@code sinOf(source, 1f, 1f)}, 相位源以弧度为单位, 输出范围 [-1, 1], 周期 2π.
      */
     public static DrawPart.PartProgress sinOf(DrawPart.PartProgress source){
         return sinOf(source, 1f, 1f);
@@ -45,10 +47,12 @@ public class MomijiPartProgress{
 
     /**
      * 以任意 Progress 为相位源构造余弦波.<p>
-     * 数学形式: {@code output = cos(source / scl) * mag}
+     * 数学形式: {@code output = cos(source / scl) * mag}.<p>
+     * 注意 scl 是弧度除数而非周期: 相位源以弧度为单位时应使用默认值 scl = 1f,
+     * 此时输出周期为 2π; 一般地输出周期为 2π * scl.
      *
-     * @param source 相位源
-     * @param scl    周期
+     * @param source 相位源, 以弧度为单位
+     * @param scl    弧度除数, 1f 时输出周期为 2π
      * @param mag    振幅
      * @return 余弦波 Progress, 输出范围 [-mag, mag]
      */
@@ -57,8 +61,8 @@ public class MomijiPartProgress{
     }
 
     /**
-     * 默认周期 1f, 振幅 1f 的 {@link #cosOf(DrawPart.PartProgress, float, float)}.<p>
-     * 等价于 {@code cosOf(source, 1f, 1f)}, 输出范围 [-1, 1].
+     * 默认弧度除数 1f, 振幅 1f 的 {@link #cosOf(DrawPart.PartProgress, float, float)}.<p>
+     * 等价于 {@code cosOf(source, 1f, 1f)}, 相位源以弧度为单位, 输出范围 [-1, 1], 周期 2π.
      */
     public static DrawPart.PartProgress cosOf(DrawPart.PartProgress source){
         return cosOf(source, 1f, 1f);

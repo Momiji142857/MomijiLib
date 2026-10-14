@@ -77,9 +77,6 @@ public class MultiCrafter extends Block{
     /** 所有可切换的配方列表（JSON 加载后直接赋值） */
     public Recipe[] recipes = {};
 
-    /** 物品容量，-1 自动计算 */
-    public int itemCapacity = -1;
-
     /** 默认的制作特效（配方未配置时使用） */
     public @Nullable Effect craftEffect = Fx.none;
     /** 默认的更新特效（配方未配置时使用） */
@@ -116,6 +113,10 @@ public class MultiCrafter extends Block{
 
     public MultiCrafter(String name){
         super(name);
+        //注意: 不要在本类中重新声明 itemCapacity 字段, 那会遮蔽 Block.itemCapacity;
+        //引擎是按 block.itemCapacity (静态类型 Block) 读的, 会永远读到默认值 10.
+        //这里直接写继承来的字段, -1 作为"自动计算"哨兵, 在 init() 里换算成实际容量.
+        itemCapacity = -1;
         update = true;
         solid = true;
         hasItems = true;
@@ -182,6 +183,17 @@ public class MultiCrafter extends Block{
             }
         }
         outputsLiquid = hasOutputLiquid;
+
+        // 若所有配方都不允许超速, 直接关掉方块级开关: OverdriveProjector 的 eachBlock 过滤
+        // 条件和 EmpBulletType 都读 Block.canOverdrive, 关掉后会被直接跳过
+        boolean anyOverdrive = false;
+        for (Recipe r : recipes) {
+            if (!(r.outputHeat > 0) && r.allowOverdrive) {
+                anyOverdrive = true;
+                break;
+            }
+        }
+        canOverdrive = anyOverdrive;
 
         // 仅当存在电力需求配方时，注册动态电力消费者
         float maxPower = 0f;
@@ -359,11 +371,11 @@ public class MultiCrafter extends Block{
                             t.row();
                         }
 
-                        boolean canOverdrive = !(rec.outputHeat > 0) && rec.allowOverdrive;
+                        boolean overdriveAllowed = !(rec.outputHeat > 0) && rec.allowOverdrive;
                         t.table(info -> {
                             info.left();
                             info.add("[lightgray]" + Core.bundle.get("stat.productiontime") + ":[] " + Strings.autoFixed(rec.craftTime / 60f, 3) + " " + Core.bundle.get("unit.seconds"));
-                            info.add("  [lightgray]能否超速:[] " + (canOverdrive ? Core.bundle.get("yes") : Core.bundle.get("no")));
+                            info.add("  [lightgray]能否超速:[] " + (overdriveAllowed ? Core.bundle.get("yes") : Core.bundle.get("no")));
                         }).colspan(colspan).padTop(4).left();
                     }
                 }).growX().pad(5).row();
@@ -385,7 +397,8 @@ public class MultiCrafter extends Block{
             if (r == null || r.inputPower <= 0) return null;
             return new Bar(
                     () -> {
-                        float recipePower = r.inputPower * 60f;
+                        //超速会提高每秒耗电, 显示方式与原版 PowerGenerator/ImpactReactor 一致
+                        float recipePower = r.inputPower * 60f * e.timeScale();
                         float status = e.power.status;
                         float available = recipePower * status;
                         if (status >= 1f && e.efficiency >= 1f)
@@ -405,8 +418,10 @@ public class MultiCrafter extends Block{
             if (r == null || r.outputPower <= 0) return null;
             return new Bar(
                     () -> {
-                        float recipeOutput = r.outputPower * 60f;
-                        float actualOutput = e.getPowerProduction();
+                        //超速同样影响实际产出
+                        float recipeOutput = r.outputPower * 60f * e.timeScale();
+                        //getPowerProduction() 返回的是每 tick 的量, 需要 *60 换算成每秒
+                        float actualOutput = e.getPowerProduction() * 60f * e.timeScale();
                         if (e.efficiency >= 1f)
                             return StatUnit.powerSecond.icon + "+ " + powerFmtNum(recipeOutput);
                         return StatUnit.powerSecond.icon + "+ " +
@@ -640,10 +655,18 @@ public class MultiCrafter extends Block{
 
     @Override
     public void drawOverlay(float x, float y, int rotation){
-        Building b = world.buildWorld(x, y);
-        if(!(b instanceof MultiCrafterBuild build)) return;
+        Recipe rec = null;
 
-        Recipe rec = build.getCurrentRecipe();
+        Building b = world.buildWorld(x, y);
+        if(b instanceof MultiCrafterBuild build){
+            //已建成的建筑: 用它当前的配方
+            rec = build.getCurrentRecipe();
+        }else if(recipes.length > 0){
+            //放置预览: 新建筑会被套用 block.lastConfig (见 Block.nextConfig / InputHandler), 为空则用默认的 0 号配方
+            int idx = (lastConfig instanceof Integer i && i >= 0 && i < recipes.length) ? i : 0;
+            rec = recipes[idx];
+        }
+
         if(rec == null || rec.outputLiquids == null) return;
 
         for(int i = 0; i < rec.outputLiquids.length; i++){
@@ -668,6 +691,9 @@ public class MultiCrafter extends Block{
     public void afterPatch(){
         super.afterPatch();
 
+        // 配方可能被 patch 替换过, 先展开 inputItem/outputItem 这类简写, 再重新推导下面的方块级标志
+        Recipe.setRecipe(recipes);
+
         boolean anyItem = false, anyLiquid = false, anyPower = false;
         boolean anyOutputPayload = false, anyInputPayload = false;
 
@@ -686,6 +712,16 @@ public class MultiCrafter extends Block{
         hasPower = anyPower;
         outputsLiquid = anyLiquid;
         outputsPayload = anyOutputPayload;
+
+        // 配方可能被 patch 改过, 重新推导方块级"能否超速"
+        boolean anyOverdrive = false;
+        for (Recipe r : recipes) {
+            if (!(r.outputHeat > 0) && r.allowOverdrive) {
+                anyOverdrive = true;
+                break;
+            }
+        }
+        canOverdrive = anyOverdrive;
         acceptsPayload = anyInputPayload;
         acceptsUnitPayloads = anyInputPayload;
 
@@ -885,7 +921,8 @@ public class MultiCrafter extends Block{
 
         // ---- 配方派生属性缓存 ----
         public float craftTime = 80f;
-        public boolean canOverdrive = true;
+        /** 当前配方是否允许被超速, 由 refreshFromRecipe() 从配方推导 (注意与 Block.canOverdrive 区分) */
+        public boolean overdriveAllowed = true;
         public float warmupSpeed = 0.019f;
         public @Nullable Effect currentCraftEffect;
         public @Nullable Effect currentUpdateEffect;
@@ -912,13 +949,16 @@ public class MultiCrafter extends Block{
         public PayloadSeq inputPayloads = new PayloadSeq();
         private final Seq<PayloadStack> cachedInputPayloadSeq = new Seq<>();
         public final Seq<Payload> outputPayloads = new Seq<>();
+        /** 是否正被载荷搬运 (与 PayloadBlockBuild.carried 同义), 被搬走时不应吐出内部载荷 */
+        public boolean carried;
         private Recipe lastRecipe;
 
         // ---- 载荷移动动画 ----
         private final Vec2 payVector = new Vec2();
         private float payRotation;
         public final float payloadSpeed = 0.7f;
-        public final float payloadRotateSpeed = 5f;
+        /** 与原版 PayloadBlock 一致 (3f) */
+        public final float payloadRotateSpeed = 3f;
 
         // ---- 单位指令 ----
         public @Nullable Vec2 commandPos;
@@ -1014,6 +1054,14 @@ public class MultiCrafter extends Block{
             if (outputPayloads.isEmpty()) return;
 
             Payload p = outputPayloads.first();
+            //与 PayloadBlockBuild.updateTile() 一致: 死掉的载荷必须丢掉, 否则会永远堵在队首;
+            //配合默认的 outputPayloadQueueLimit = -1 会让工厂永久停产
+            if (p.isDead()) {
+                outputPayloads.remove(0);
+                payloadsChanged = true;
+                payVector.setZero();
+                return;
+            }
             p.update(null, this);
 
             Vec2 dest = Tmp.v1.trns(rotdeg(), size * tilesize / 2f);
@@ -1099,6 +1147,7 @@ public class MultiCrafter extends Block{
         public Payload createPayload(UnlockableContent content) {
             if (content instanceof Block b) return new BuildPayload(b, team);
             else if (content instanceof UnitType unitType) return new UnitPayload(unitType.create(team));
+            Log.warn("MultiCrafter @: 载荷输出配置了无法创建的内容 @", block.name, content);
             return null;
         }
 
@@ -1322,7 +1371,7 @@ public class MultiCrafter extends Block{
 
             if (rec == null) {
                 craftTime = 80f;
-                canOverdrive = false;
+                overdriveAllowed = false;
                 warmupSpeed = 0.019f;
                 currentCraftEffect = craftEffect;
                 currentUpdateEffect = null;
@@ -1332,7 +1381,7 @@ public class MultiCrafter extends Block{
                 isUnitRecipe = false;
             } else {
                 craftTime = rec.craftTime;
-                canOverdrive = !(rec.outputHeat > 0) && rec.allowOverdrive;
+                overdriveAllowed = !(rec.outputHeat > 0) && rec.allowOverdrive;
                 warmupSpeed = rec.warmupSpeed;
                 currentCraftEffect = rec.craftEffect != null ? rec.craftEffect : craftEffect;
                 currentUpdateEffect = rec.updateEffect != null ? rec.updateEffect : updateEffect;
@@ -1376,6 +1425,13 @@ public class MultiCrafter extends Block{
                     }
                 }
                 if (!supported) command = null;
+            }
+
+            //切到不允许超速的配方时, 立刻清掉残留的增益增幅;
+            //只清 >1 的部分, 不干扰 <1 的减速 (applySlowdown 是另一条通道)
+            if (!overdriveAllowed && timeScale > 1f) {
+                timeScale = 1f;
+                timeScaleDuration = 0f;
             }
         }
 
@@ -1488,14 +1544,16 @@ public class MultiCrafter extends Block{
 
         // ============ 重写方法 ============
 
+        /**
+         * 当前配方不允许超速时直接拒绝外部增幅, 让 timeScale 全程保持 1:
+         * 这样 delta()/edelta() 都是原速, 耗电、产出、液体输出、dump 节流全部自然正确,
+         * 不需要在别的地方再判断. 也不影响 applySlowdown() 那条独立的减速通道.
+         */
         @Override
-        public void update() {
-            if ((timeScaleDuration -= Time.delta) <= 0f || !canOverdrive) timeScale = 1f;
-            if (!headless && block.ambientSound != Sounds.none && shouldAmbientSound()) {
-                control.sound.loop(block.ambientSound, this, block.ambientSoundVolume * ambientVolume());
+        public void applyBoost(float intensity, float duration) {
+            if (overdriveAllowed) {
+                super.applyBoost(intensity, duration);
             }
-            updateConsumption();
-            if (enabled || !block.noUpdateDisabled) updateTile();
         }
 
         @Override
@@ -1547,6 +1605,8 @@ public class MultiCrafter extends Block{
         public void onProximityUpdate() {
             super.onProximityUpdate();
             if (attribute != null) attrsum = sumAttribute(attribute, tile.x, tile.y);
+            //重新回到世界里就不再是被搬运状态 (原版靠 drawTeamTop() 清, 但本类重写了 draw() 不会调到它)
+            carried = false;
         }
 
         public float efficiencyMultiplier() {
@@ -1558,6 +1618,15 @@ public class MultiCrafter extends Block{
         public void pickedUp() {
             attrsum = 0f;
             warmup = 0f;
+            //被载荷单位整体搬走, 此时 onRemoved() 不能把内部载荷吐出来 (与 PayloadBlockBuild 一致)
+            carried = true;
+        }
+
+        /** 被载荷放下时由 BuildPayload.place() 调用, 此时重新回到世界 */
+        @Override
+        public void dropped() {
+            super.dropped();
+            carried = false;
         }
 
         // ============ 载荷输入接口 ============
@@ -1581,15 +1650,22 @@ public class MultiCrafter extends Block{
         public void handlePayload(Building source, Payload payload) {
             var content = payload.content();
             Fx.payloadDeposit.at(x, y);
+            //注意: 这里不能调 unit.remove(). 单位被拾起时 BuildingComp.handleUnitPayload()
+            //已经 remove() 过一次(单位计数 -1), 抛出时 UnitPayload.dump() 又会 add() 回去(+1);
+            //再 remove() 一次会把队伍单位计数多减一次, 影响单位上限判定和显示
             inputPayloads.add(content, 1);
-            if (payload instanceof UnitPayload up) up.unit.remove();
             payloadsChanged = true;
         }
 
         @Override
         public Payload getPayload() { return outputPayloads.isEmpty() ? null : outputPayloads.first(); }
         @Override
-        public Payload takePayload() { return outputPayloads.isEmpty() ? null : outputPayloads.remove(0); }
+        public Payload takePayload() {
+            if (outputPayloads.isEmpty()) return null;
+            Payload p = outputPayloads.remove(0);
+            payloadsChanged = true;
+            return p;
+        }
         @Override
         public PayloadSeq getPayloads() { return inputPayloads; }
 
@@ -1868,6 +1944,23 @@ public class MultiCrafter extends Block{
                 payloadPanel.remove();
                 payloadPanel = null;
             }
+
+            //与 PayloadBlockBuild.onRemoved() 一致: 拆除时把还没送出去的载荷吐回世界;
+            //被载荷整体搬走(carried)时保留内容物; dump 不下来的(比如单位堆叠)直接销毁
+            if (!carried && !outputPayloads.isEmpty()) {
+                for (Payload p : outputPayloads) {
+                    if (!p.dump()) p.destroyed();
+                }
+                outputPayloads.clear();
+            }
+        }
+
+        @Override
+        public void onDestroyed() {
+            //与 PayloadBlockBuild.onDestroyed() 一致
+            for (Payload p : outputPayloads) p.destroyed();
+            outputPayloads.clear();
+            super.onDestroyed();
         }
 
         @Override

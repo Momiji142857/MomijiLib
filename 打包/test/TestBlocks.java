@@ -1,4 +1,4 @@
-package momijiLib.test;
+package test;
 
 import mindustry.content.*;
 import mindustry.entities.effect.RadialEffect;
@@ -13,6 +13,7 @@ import mindustry.world.meta.Attribute;
 import mindustry.world.meta.Env;
 import momijiLib.type.world.blocks.distribution.BatchDumpBridge;
 import momijiLib.type.world.blocks.distribution.ItemLiquidJunction;
+import momijiLib.type.world.blocks.production.LinkedBeamDrill;
 import momijiLib.type.world.blocks.production.LinkedDrill;
 import momijiLib.type.world.blocks.production.MultiCrafter;
 import momijiLib.type.world.blocks.production.OmniCrafter;
@@ -25,11 +26,11 @@ import momijiLib.type.world.blocks.storage.LinkedBlock;
  * @since 2026-10-04
  */
 public class TestBlocks{
-    public static Block testFactory, testFactoryO, itemLiquidJunction, LinkedContainer, LinkedMechanicalDrill, itemBridgePro;
+    public static Block testFactory, testFactoryO, itemLiquidJunction, LinkedContainer, LinkedMechanicalDrill, LinkedPlasmaBore, itemBridgePro;
 
-    public static void load() {
+    public static void load(){
 
-        testFactory = new MultiCrafter("test-factory") {{
+        testFactory = new MultiCrafter("test-factory"){{
             requirements(Category.crafting, ItemStack.with(Items.copper, 20, Items.lead, 20));
             size = 3;
             health = 300;
@@ -116,7 +117,7 @@ public class TestBlocks{
             };
         }};
 
-        testFactoryO = new OmniCrafter("test-factory-o") {{
+        testFactoryO = new OmniCrafter("test-factory-o"){{
             requirements(Category.crafting, ItemStack.with(Items.tungsten, 120, Items.graphite, 80, Items.silicon, 100, Items.beryllium, 120));
             size = 3;
 
@@ -136,7 +137,12 @@ public class TestBlocks{
             rotateDraw = false;
             rotate = true;
 
-            drawer = new DrawMulti(new DrawRegion("-bottom"), new DrawLiquidRegion(), new DrawDefault(), new DrawHeatOutput());
+            drawer = new DrawMulti(
+                    new DrawRegion("-bottom"),
+                    new DrawLiquidRegion(),
+                    new DrawDefault(),
+                    new DrawHeatOutput()
+            );
             ambientSound = Sounds.loopExtract;
             ambientSoundVolume = 0.08f;
 
@@ -151,7 +157,7 @@ public class TestBlocks{
             hasLiquids = true;
         }};
 
-        itemLiquidJunction = new ItemLiquidJunction("item-liquid-junction") {{
+        itemLiquidJunction = new ItemLiquidJunction("item-liquid-junction"){{
             requirements(Category.distribution, ItemStack.with(Items.copper, 3, Items.graphite, 4, Items.metaglass, 8));
             speed = 26;
             capacity = 6;
@@ -176,6 +182,20 @@ public class TestBlocks{
             researchCost = ItemStack.with(Items.copper, 10);
 
             consumeLiquid(Liquids.water, 0.05f).boost();
+        }};
+
+        LinkedPlasmaBore = new LinkedBeamDrill("linked-plasma-bore"){{
+            requirements(Category.production, ItemStack.with(Items.beryllium, 40));
+            consumePower(0.15f);
+
+            drillTime = 160f;
+            tier = 3;
+            size = 2;
+            range = 5;
+            fogRadius = 3;
+            researchCost = ItemStack.with(Items.beryllium, 10);
+
+            consumeLiquid(Liquids.hydrogen, 0.25f / 60f).boost();
         }};
 
         itemBridgePro = new BatchDumpBridge("bridge-conveyor-pro"){{
