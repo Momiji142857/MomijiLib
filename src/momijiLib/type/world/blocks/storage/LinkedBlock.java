@@ -60,6 +60,8 @@ public class LinkedBlock extends Block{
         public @Nullable LinkedBuild groupLeader;
         /** 组成员总数, 仅组长的此字段有效 */
         public int groupSize = 1;
+        /** 是否正在被移除, 拆除过程中不能被重新并入任何组 */
+        protected boolean removed;
 
         @Override
         public boolean acceptItem(Building source, Item item){
@@ -98,6 +100,8 @@ public class LinkedBlock extends Block{
             for(int i = 0; i < proximity.size; i++){
                 Building other = proximity.get(i);
                 if(!(other.block == block && other instanceof LinkedBuild lb && lb.team == team)) continue;
+                //正在拆除的建筑不参与合并
+                if(lb.removed) continue;
 
                 LinkedBuild otherLeader = lb.leader();
                 if(otherLeader != selfLeader && groupSet.add(otherLeader.tile.pos())){
@@ -180,7 +184,7 @@ public class LinkedBlock extends Block{
             Seq<LinkedBuild> neighbors = new Seq<>();
             for(int i = 0; i < proximity.size; i++){
                 Building other = proximity.get(i);
-                if(other.block == block && other instanceof LinkedBuild lb && lb.team == team && lb.leader() == oldLeader){
+                if(other.block == block && other instanceof LinkedBuild lb && lb.team == team && !lb.removed && lb.leader() == oldLeader){
                     neighbors.add(lb);
                 }
             }
@@ -266,6 +270,9 @@ public class LinkedBlock extends Block{
                 for(int i = 0; i < current.proximity.size; i++){
                     Building other = current.proximity.get(i);
                     if(!(other.block == block && other instanceof LinkedBuild lb && lb.team == team)) continue;
+                    //组长被拆除时 onRemoved 早于 removeFromProximity, 自身仍残留在邻居的 proximity 中,
+                    //不排除的话会被当成组员重新收编, 导致组容量虚高 / groupLeader 指向已删除建筑
+                    if(lb.removed) continue;
 
                     if(lb.leader() != targetLeader || !visited.add(lb.tile.pos())) continue;
 
@@ -326,6 +333,8 @@ public class LinkedBlock extends Block{
 
         @Override
         public void onRemoved(){
+            //必须先标记: onRemoved 早于 removeFromProximity 执行
+            removed = true;
             if(groupLeader != null || groupSize > 1){
                 removeFromGroup();
             }

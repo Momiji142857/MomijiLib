@@ -1,4 +1,4 @@
-package momijiLib.test;
+package test;
 
 import arc.graphics.Blending;
 import arc.graphics.Color;
