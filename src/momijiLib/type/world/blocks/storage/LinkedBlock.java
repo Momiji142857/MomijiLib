@@ -5,6 +5,7 @@ import arc.struct.IntSet;
 import arc.struct.Queue;
 import arc.struct.Seq;
 import arc.util.Nullable;
+import arc.util.io.Writes;
 import mindustry.gen.Building;
 import mindustry.type.Item;
 import mindustry.type.Liquid;
@@ -62,6 +63,8 @@ public class LinkedBlock extends Block{
         public int groupSize = 1;
         /** 是否正在被移除, 拆除过程中不能被重新并入任何组 */
         protected boolean removed;
+        /** 组员写存档时用的空物品池: 共享池只由组长写, 否则读档后每个组员各存一份, 重建 proximity 时会重复求和 */
+        private final ItemModule emptyPool = new ItemModule();
 
         @Override
         public boolean acceptItem(Building source, Item item){
@@ -350,6 +353,32 @@ public class LinkedBlock extends Block{
             if(outputLiquids){
                 dumpLiquid(liquids.current());
             }
+        }
+
+        /**
+         * 存档: 共享物品池只由组长写, 组员写空.
+         * 原因: 读档时 World.endMapLoad() 会逐格重建 proximity 并触发 mergeGroups(),
+         * 而 mergeGroups() 是把各组的 items 相加; 如果每个组员都存了一份完整的组总量,
+         * 读档后就会被重复求和 (N 个组员 => N 倍). 而且读档期间 world.isGenerating()
+         * 为 true, clampResources() 不会兜底. 所以只让组长写, 组员写空池.
+         */
+        @Override
+        public void writeAll(Writes write){
+            ItemModule real = items;
+            boolean member = groupLeader != null && groupLeader != this;
+            if(member) items = emptyPool;
+            try{
+                super.writeAll(write);
+            }finally{
+                items = real;
+            }
+        }
+
+        /** 网络同步必须写完整物品: 客户端 readSync() 会把读到的数据直接写进当前模块(可能就是共享池) */
+        @Override
+        public void writeSync(Writes write){
+            writeBase(write);
+            write(write);
         }
 
         @Override
