@@ -11,6 +11,7 @@ import mindustry.world.Block;
 import mindustry.world.draw.*;
 import mindustry.world.meta.Attribute;
 import mindustry.world.meta.Env;
+import momijiLib.type.world.blocks.defense.SquareOverdriveProjector;
 import momijiLib.type.world.blocks.distribution.BatchDumpBridge;
 import momijiLib.type.world.blocks.distribution.ItemLiquidJunction;
 import momijiLib.type.world.blocks.production.LinkedBeamDrill;
@@ -26,7 +27,7 @@ import momijiLib.type.world.blocks.storage.LinkedBlock;
  * @since 2026-10-04
  */
 public class TestBlocks{
-    public static Block testFactory, testFactoryO, itemLiquidJunction, LinkedContainer, LinkedMechanicalDrill, LinkedPlasmaBore, itemBridgePro;
+    public static Block testFactory, testFactoryO, itemLiquidJunction, LinkedContainer, LinkedMechanicalDrill, LinkedPlasmaBore, itemBridgePro, squareOverdriveProjector;
 
     public static void load(){
 
@@ -170,6 +171,7 @@ public class TestBlocks{
             size = 2;
             itemCapacity = 300;
             scaledHealth = 55;
+            maxGroupSize = 4;
         }};
 
         LinkedMechanicalDrill = new LinkedDrill("linked-mechanical-drill"){{
@@ -208,6 +210,14 @@ public class TestBlocks{
             pulse = true;
             envEnabled |= Env.space;
             consumePower(0.30f);
+        }};
+
+        squareOverdriveProjector = new SquareOverdriveProjector("square-overdrive-projector"){{
+            requirements(Category.effect, ItemStack.with(Items.lead, 100, Items.titanium, 75, Items.silicon, 75, Items.plastanium, 30));
+            consumePower(3.50f);
+            size = 2;
+            consumeItem(Items.phaseFabric).boost();
+            ambientSoundVolume = 0.08f;
         }};
 
     }

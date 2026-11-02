@@ -203,6 +203,11 @@ public class MultiCrafter extends Block{
         if (maxPower > 0) {
             consume(new DynamicConsumePower(maxPower));
         }
+        // 只有存在耗电配方时才把自己标记为耗电方.
+        // Block.consumesPower 默认是 true, 而"纯发电"配方不会注册 ConsumePower, consPower 会一直是 null;
+        // PowerGraph.add() 走的是 outputsPower && consumesPower && !consPower.buffered 这条分支,
+        // 会直接解引用 consPower 而 NPE (官方 PowerDistributor 也是显式写 consumesPower = false 来规避).
+        consumesPower = maxPower > 0;
 
         // 自动计算物品/液体容量
         if (itemCapacity < 0) {
@@ -695,6 +700,7 @@ public class MultiCrafter extends Block{
         Recipe.setRecipe(recipes);
 
         boolean anyItem = false, anyLiquid = false, anyPower = false;
+        boolean anyConsumePower = false, anyOutputPower = false;
         boolean anyOutputPayload = false, anyInputPayload = false;
 
         for(Recipe r : recipes){
@@ -702,7 +708,8 @@ public class MultiCrafter extends Block{
             if(r.outputItems != null && r.outputItems.length > 0) anyItem = true;
             if(r.inputLiquids != null && r.inputLiquids.length > 0) anyLiquid = true;
             if(r.outputLiquids != null && r.outputLiquids.length > 0) anyLiquid = true;
-            if(r.inputPower > 0 || r.outputPower > 0) anyPower = true;
+            if(r.inputPower > 0){ anyPower = true; anyConsumePower = true; }
+            if(r.outputPower > 0){ anyPower = true; anyOutputPower = true; }
             if(r.outputPayloads != null && r.outputPayloads.length > 0) anyOutputPayload = true;
             if(r.inputPayloads != null && r.inputPayloads.length > 0) anyInputPayload = true;
         }
@@ -710,6 +717,10 @@ public class MultiCrafter extends Block{
         hasItems = anyItem;
         hasLiquids = anyLiquid;
         hasPower = anyPower;
+        // 电力标记同样要跟着配方重算: patch 可能把发电/耗电配方整段换掉,
+        // 只按 init() 的结论走会让 PowerGraph 把方块分错类 (见 init() 里 consumesPower 的说明)
+        consumesPower = anyConsumePower;
+        outputsPower = anyOutputPower;
         outputsLiquid = anyLiquid;
         outputsPayload = anyOutputPayload;
 
@@ -1154,21 +1165,43 @@ public class MultiCrafter extends Block{
         // ============ 输出 ============
 
         public void dumpOutputs() {
-            if (currentRecipeObj == null) return;
+            // 计时器必须每 tick 都推进: 原写法把它放在 outputItems != null 的条件里,
+            // "当前配方没有物品产物"时永远走不到下面那段残留物排出
+            boolean dumped = timer(timerDump, dumpTime / timeScale);
 
-            if (currentRecipeObj.outputItems != null && timer(timerDump, dumpTime / timeScale)) {
-                for (ItemStack output : currentRecipeObj.outputItems) {
-                    dump(output.item);
-                }
-            }
-
-            if (currentRecipeObj.outputLiquids != null) {
+            if (currentRecipeObj != null && currentRecipeObj.outputLiquids != null) {
                 for (int i = 0; i < currentRecipeObj.outputLiquids.length; i++) {
                     int dir = currentRecipeObj.liquidOutputDirections.length > i
                             ? currentRecipeObj.liquidOutputDirections[i] : -1;
                     dumpLiquid(currentRecipeObj.outputLiquids[i].liquid, 2f, dir);
                 }
             }
+
+            if (!dumped) return;
+
+            if (currentRecipeObj != null && currentRecipeObj.outputItems != null) {
+                for (ItemStack output : currentRecipeObj.outputItems) {
+                    dump(output.item);
+                }
+            }
+
+            // 切换配方后, 上一个配方留下的物品会滞留在仓库里: acceptItem() 只收当前配方的输入,
+            // 上面也只排当前配方的产物, 于是这些残留物永远出不去, 还会一直占着容量.
+            // 这里把"不属于当前配方输入"的物品都排出去; 没有选中配方时等于清空.
+            if (items != null && items.total() > 0) {
+                for (Item item : content.items()) {
+                    if (items.get(item) > 0 && !isRecipeInput(item)) dump(item);
+                }
+            }
+        }
+
+        /** 当前配方的输入物品不能往外排, 否则会把刚运来的原料倒回传送带/容器 (与官方 Separator.canDump 同义). */
+        private boolean isRecipeInput(Item item) {
+            if (currentRecipeObj == null || currentRecipeObj.inputItems == null) return false;
+            for (ItemStack stack : currentRecipeObj.inputItems) {
+                if (stack.item == item) return true;
+            }
+            return false;
         }
 
         // ============ 配置界面 ============
@@ -1316,9 +1349,10 @@ public class MultiCrafter extends Block{
 
             // 配方列表滚动面板
             ScrollPane pane = new ScrollPane(content, Styles.smallPane);
+            // 不能调 setFlickScroll(false): 它会移除 flickScrollListener, 而那是触摸拖拽滚动的唯一入口,
+            // 手机上没有滚轮可以兜底, 配方列表就会无法滑动 (官方 ItemSelection 也保持默认 true).
             pane.setScrollingDisabled(true, false);
             pane.setOverscroll(false, false);
-            pane.setFlickScroll(false);
             pane.exited(() -> {
                 if (pane.hasScroll()) {
                     Core.scene.setScrollFocus(null);

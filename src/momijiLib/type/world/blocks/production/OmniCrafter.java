@@ -17,6 +17,7 @@ import mindustry.game.Team;
 import mindustry.gen.Building;
 import mindustry.gen.Iconc;
 import mindustry.graphics.Pal;
+import mindustry.logic.LAccess;
 import mindustry.type.Item;
 import mindustry.type.ItemStack;
 import mindustry.type.Liquid;
@@ -39,6 +40,7 @@ import mindustry.world.draw.DrawDefault;
 import mindustry.world.draw.DrawHeatOutput;
 import mindustry.world.draw.DrawMulti;
 import mindustry.world.meta.Attribute;
+import mindustry.world.meta.BlockStatus;
 import mindustry.world.meta.Stat;
 import mindustry.world.meta.StatUnit;
 import mindustry.world.meta.StatValues;
@@ -130,9 +132,35 @@ public class OmniCrafter extends GenericCrafter{
             drawer = new DrawMulti(new DrawDefault(), new DrawHeatOutput());
         }
 
+        // 与原版 HeatProducer 一致: 发热方块不参与超速, 否则超速会把热量产出一起放大
+        if(heatOutput > 0) canOverdrive = false;
+
         if(randomItemCapacity < 0) randomItemCapacity = itemCapacity;
 
+        prepareOutputs();
+    }
+
+    @Override
+    public void afterPatch(){
+        super.afterPatch();
+        // outputItems / randomResults 可能被 JSON patch 改掉, 这些派生量必须跟着重算,
+        // 否则 craft() / shouldConsume() 会继续按旧配方走
+        if(randomItemCapacity < 0) randomItemCapacity = itemCapacity;
+        prepareOutputs();
+    }
+
+    /**
+     * 由 outputItems / randomResults 推导出容量判定与排出要用的派生数据.
+     * init() 和 afterPatch() 都要跑一遍 (配方可能被 patch 替换过).
+     */
+    protected void prepareOutputs(){
+        weightSum = 0;
+        fixedOutputItems = null;
+        randomOutputItems = null;
+
+        // 固定产出的副本: 与随机产出重叠的物品, 容量判定要按"可能再多 1 个"算
         ItemStack[] fixedOutput = outputItems == null ? null : ItemStack.copy(outputItems);
+
         if(randomResults != null){
             ConsumeItems consItems = findConsumer(c -> c instanceof ConsumeItems);
 
@@ -151,6 +179,7 @@ public class OmniCrafter extends GenericCrafter{
             for(ItemStack s : randomResults){
                 Item item = s.item;
 
+                // 输入物品不单独往外排(它会被当作原料吃掉), 也不参与随机产出的容量统计
                 if(consItemSet.contains(item)) continue;
 
                 if(fixedItemSet.contains(item)){
@@ -162,7 +191,8 @@ public class OmniCrafter extends GenericCrafter{
                             }
                         }
                     }
-                }else{
+                }else if(!randomList.contains(item)){
+                    // 同一种物品可能在 randomResults 里出现多次, 统计时只算一次
                     randomList.add(item);
                 }
             }
@@ -172,6 +202,7 @@ public class OmniCrafter extends GenericCrafter{
             for(ItemStack stack : randomResults) weightSum += stack.amount;
             weightSum += emptyWeight;
         }
+
         fixedOutputItems = fixedOutput;
     }
 
@@ -398,7 +429,7 @@ public class OmniCrafter extends GenericCrafter{
 
     @Override
     public boolean outputsItems(){
-        return outputItems != null || randomResults != null;
+        return (outputItems != null && outputItems.length > 0) || (randomResults != null && randomResults.length > 0);
     }
 
     //region AttributeCrafter
@@ -442,50 +473,44 @@ public class OmniCrafter extends GenericCrafter{
 
         @Override
         public boolean shouldConsume(){
-            // Heat
-            if(heatRequirement > 0f && inputHeat <= 0) return false;
-
-            boolean anyOutput = false;
-            boolean allFull  = true;
+            // 与原版 HeatCrafter 一致: 没有热量就不工作
+            if(heatRequirement > 0f && inputHeat <= 0f) return false;
 
             if(!ignoreItemFullness){
-
+                // 固定产出: 原版 GenericCrafter 的判定 —— 装不下就停产;
+                // 只有开了 dumpExtraItem(多余产物销毁)才继续生产, 超出的部分在 craft() 里销毁.
+                // 注意用的是 fixedOutputItems(副本): 与随机产出重叠的物品按"可能再多 1 个"算余量
                 if(fixedOutputItems != null){
-                    anyOutput = true;
                     for(var output : fixedOutputItems){
-                        if(items.get(output.item) + output.amount > itemCapacity){
-                            if(!dumpExtraItem) return false;
-
-                        }else allFull = false;
-                    }
-                }
-
-                if(randomResults != null){
-                    anyOutput = true;
-                    int total = 0;
-                    if(randomOutputItems != null){
-                        for(Item output : randomOutputItems){
-                            total += items.get(output);
-                            if(total >= randomItemCapacity){
-                                if(!dumpRandomItem) return false;
-
-                            }else allFull = false;
+                        if(items.get(output.item) + scaleOutput(output.amount) > itemCapacity && !dumpExtraItem){
+                            return false;
                         }
                     }
                 }
-            }
 
-            if(!ignoreLiquidFullness && outputLiquids != null){
-                anyOutput = true;
-                for(var output : outputLiquids){
-                    if(liquids.get(output.liquid) >= liquidCapacity - 0.001f){
-                        if(!dumpExtraLiquid) return false;
-
-                    }else allFull = false;
+                // 随机产出: 按"随机产物总量"判定(与原版 Separator 的 total 判定同义, 但不含输入物品和固定产物);
+                // 开了 dumpRandomItem 时继续生产, 超出的部分在 craft() 里销毁
+                if(randomResults != null && randomResults.length > 0 && randomOutputItems != null){
+                    int total = 0;
+                    for(Item output : randomOutputItems) total += items.get(output);
+                    if(total >= randomItemCapacity && !dumpRandomItem) return false;
                 }
             }
 
-            if(anyOutput && allFull) return false;
+            // 液体产出: 与原版 GenericCrafter 完全一致
+            if(!ignoreLiquidFullness && outputLiquids != null && outputLiquids.length > 0){
+                boolean allFull = true;
+                for(var output : outputLiquids){
+                    if(liquids.get(output.liquid) >= liquidCapacity - 0.001f){
+                        if(!dumpExtraLiquid) return false;
+                    }else{
+                        // 只要还有任意一种液体没满, 就不算全满
+                        allFull = false;
+                    }
+                }
+                // 液体产物全部满仓时无法继续生产
+                if(allFull) return false;
+            }
 
             return enabled;
         }
@@ -525,11 +550,34 @@ public class OmniCrafter extends GenericCrafter{
 
         @Override
         public void dumpOutputs(){
-            super.dumpOutputs();
+            // 不能先调 super.dumpOutputs() 再自己调一次 timer(timerDump, ...):
+            // 这一版 arc 的 Interval 是基于 Time.time 的(arc/util/Interval.java), 同一个 tick 内
+            // 第二次 timer() 必然返回 false, 随机产物就永远排不出去.
+            // 所以照原版把"固定产物 + 随机产物"合并进同一个 dump 周期.
+            boolean dumped = timer(timerDump, dumpTime / timeScale);
 
-            if(randomOutputItems != null && timer(timerDump, dumpTime / timeScale)){
+            if(dumped && outputItems != null){
+                // 原版 GenericCrafter 的排出方式: 每次按 scaleOutput(amount) 的量排, 排不动就留到下一个周期
+                for(var output : outputItems){
+                    int amount = Math.max(1, Mathf.round(scaleOutput(output.amount)));
+                    for(int i = 0; i < amount; i++){
+                        if(!dump(output.item)) break;
+                    }
+                }
+            }
+
+            if(dumped && randomOutputItems != null){
+                // 原版 Separator 的排出方式: 逐个物品尝试(输入物品不在这个列表里, 不会被倒出去)
                 for(Item output : randomOutputItems){
                     dump(output);
+                }
+            }
+
+            // 液体产物与原版一致: 每 tick 都尝试排出
+            if(outputLiquids != null){
+                for(int i = 0; i < outputLiquids.length; i++){
+                    int dir = liquidOutputDirections.length > i ? liquidOutputDirections[i] : -1;
+                    dumpLiquid(outputLiquids[i].liquid, 2f, dir);
                 }
             }
         }
@@ -538,35 +586,85 @@ public class OmniCrafter extends GenericCrafter{
         public void craft(){
             consume();
 
-            if(outputItems != null){
-                for(var output : outputItems){
-                    Item item = output.item;
-                    if(items.get(item) < itemCapacity){
-                        for(int i = 0; i < output.amount; i++) offload(output.item);
+            if(outputItems != null && outputItems.length > 0){
+                // 原版 GenericCrafter 的发放方式: craft() 里不做容量判断, 直接 offload
+                // (先推给邻居, 推不掉才进自己仓库); 仓储上限由 shouldConsume() 负责,
+                // 开了 dumpExtraItem 时超出容量的部分在这里销毁
+                if(outputAccumulator == null || outputAccumulator.length != outputItems.length){
+                    outputAccumulator = new float[outputItems.length];
+                }
+                for(int i = 0; i < outputItems.length; i++){
+                    ItemStack output = outputItems[i];
+
+                    outputAccumulator[i] += scaleOutput(output.amount);
+                    int floored = Mathf.floor(outputAccumulator[i]);
+                    outputAccumulator[i] -= floored;
+
+                    for(int j = 0; j < floored; j++){
+                        offload(output.item);
                     }
                 }
+                trimFixedItems();
             }
 
-            if(randomResults != null){
-                int i = Mathf.randomSeed(seed++, 0, weightSum - 1);
-                int count = 0;
-                Item item = null;
+            if(randomResults != null && randomResults.length > 0){
+                // 原版 Separator 的抽签方式: 权重区间 + seed 自增 (seed 会随存档保存, 见 write/read)
+                if(weightSum > 0){
+                    int i = Mathf.randomSeed(seed++, 0, weightSum - 1);
+                    int count = 0;
+                    Item item = null;
 
-                for(ItemStack stack : randomResults){
-                    if(i >= count && i < count + stack.amount){
-                        item = stack.item;
-                        break;
+                    for(ItemStack stack : randomResults){
+                        if(i >= count && i < count + stack.amount){
+                            item = stack.item;
+                            break;
+                        }
+                        count += stack.amount;
                     }
-                    count += stack.amount;
-                }
 
-                if(item != null && items.get(item) < randomItemCapacity) offload(item);
+                    // 与原版 Separator 一致: 这种物品已经装满就不再发放;
+                    // 开了 dumpRandomItem 时必须继续产出, 多出来的部分由 trimRandomItems() 销毁
+                    if(item != null && (dumpRandomItem || items.get(item) < randomItemCapacity)){
+                        offload(item);
+                    }
+                }
+                trimRandomItems();
             }
 
             if(wasVisible){
                 craftEffect.at(x, y);
             }
             progress %= 1f;
+        }
+
+        /** 开了 dumpExtraItem 时, 把超过 itemCapacity 的固定产物直接销毁(原版没有这项, 是本方块的扩展行为). */
+        protected void trimFixedItems(){
+            if(!dumpExtraItem || fixedOutputItems == null) return;
+
+            for(ItemStack output : fixedOutputItems){
+                int over = items.get(output.item) - itemCapacity;
+                if(over > 0) items.remove(output.item, over);
+            }
+        }
+
+        /** 开了 dumpRandomItem 时, 把随机产物总量压回 randomItemCapacity, 多出来的销毁. */
+        protected void trimRandomItems(){
+            if(!dumpRandomItem || randomOutputItems == null) return;
+
+            int total = 0;
+            for(Item output : randomOutputItems) total += items.get(output);
+
+            int over = total - randomItemCapacity;
+            if(over <= 0) return;
+
+            for(int i = randomOutputItems.length - 1; i >= 0 && over > 0; i--){
+                Item output = randomOutputItems[i];
+                int amount = Math.min(over, items.get(output));
+                if(amount > 0){
+                    items.remove(output, amount);
+                    over -= amount;
+                }
+            }
         }
 
         //下面这个可以让热量自循环, 但是可能造成死循环.
@@ -646,16 +744,26 @@ public class OmniCrafter extends GenericCrafter{
             return attrScale;
         }
 
+        /** 1 = 多了 seed 字段(与原版 Separator 的做法一致); 旧存档按 0 处理, 不读 seed. */
+        @Override
+        public byte version(){
+            return 1;
+        }
+
         @Override
         public void write(Writes write){
             super.write(write);
             write.f(outputHeat);
+            // 随机产出的进度必须存档, 否则读档后 seed 会被 created() 重置回同一个值, 同一段随机序列会被重放
+            write.i(seed);
         }
 
         @Override
         public void read(Reads read, byte revision){
             super.read(read, revision);
             outputHeat = read.f();
+            // 旧存档没有 seed, 保留 created() 生成的值
+            if(revision >= 1) seed = read.i();
         }
 
         //region randomOutput
@@ -682,6 +790,20 @@ public class OmniCrafter extends GenericCrafter{
         @Override
         public float warmupTarget(){
             return (heatRequirement > 0) ? Mathf.clamp(inputHeat / heatRequirement) : 1f;
+        }
+
+        /** 与原版 HeatCrafter 一致: 缺热量时显示"缺少输入". */
+        @Override
+        public BlockStatus status(){
+            if(heatRequirement > 0f && inputHeat <= 0f && enabled) return BlockStatus.noInput;
+            return super.status();
+        }
+
+        /** 与原版 HeatCrafter / HeatProducer 一致, 让逻辑处理器能读到热量. */
+        @Override
+        public double sense(LAccess sensor){
+            if(sensor == LAccess.heat) return heatRequirement > 0f ? inputHeat : outputHeat;
+            return super.sense(sensor);
         }
 
         //endregion
