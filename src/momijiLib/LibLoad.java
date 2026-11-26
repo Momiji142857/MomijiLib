@@ -12,10 +12,12 @@ import momijiLib.type.weapons.StatefulWeapon;
 import momijiLib.type.world.blocks.defense.SquareOverdriveProjector;
 import momijiLib.type.world.blocks.distribution.BatchDumpBridge;
 import momijiLib.type.world.blocks.distribution.ItemLiquidJunction;
+import momijiLib.type.world.blocks.distribution.TransformItemBridge;
 import momijiLib.type.world.blocks.production.LinkedDrill;
 import momijiLib.type.world.blocks.production.MultiCrafter;
 import momijiLib.type.world.blocks.production.OmniCrafter;
 import momijiLib.type.world.blocks.storage.LinkedBlock;
+import momijiLib.type.world.blocks.storage.SharedStorage;
 
 public class LibLoad extends Mod{
 
@@ -50,10 +52,12 @@ public class LibLoad extends Mod{
         ClassMap.classes.put("Momiji-SquareOverdriveProjector", SquareOverdriveProjector.class);
         ClassMap.classes.put("Momiji-BatchDumpBridge", BatchDumpBridge.class);
         ClassMap.classes.put("Momiji-ItemLiquidJunction", ItemLiquidJunction.class);
+        ClassMap.classes.put("Momiji-TransformItemBridge", TransformItemBridge.class);
         ClassMap.classes.put("Momiji-LinkedDrill", LinkedDrill.class);
         ClassMap.classes.put("Momiji-MultiCrafter", MultiCrafter.class);
         ClassMap.classes.put("Momiji-OmniCrafter", OmniCrafter.class);
         ClassMap.classes.put("Momiji-LinkedBlock", LinkedBlock.class);
+        ClassMap.classes.put("Momiji-SharedStorage", SharedStorage.class);
 
         //启用测试内容.
         if(test){

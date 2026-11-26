@@ -19,6 +19,7 @@ import momijiLib.type.world.blocks.production.LinkedDrill;
 import momijiLib.type.world.blocks.production.MultiCrafter;
 import momijiLib.type.world.blocks.production.OmniCrafter;
 import momijiLib.type.world.blocks.storage.LinkedBlock;
+import momijiLib.type.world.blocks.storage.SharedStorage;
 
 /**
  * 掌管测试用建筑.
@@ -27,7 +28,11 @@ import momijiLib.type.world.blocks.storage.LinkedBlock;
  * @since 2026-10-04
  */
 public class TestBlocks{
-    public static Block testFactory, testFactoryO, itemLiquidJunction, LinkedContainer, LinkedMechanicalDrill, LinkedPlasmaBore, itemBridgePro, squareOverdriveProjector;
+    public static Block testFactory, testFactoryO, itemLiquidJunction, LinkedContainer,
+            LinkedMechanicalDrill, LinkedPlasmaBore, itemBridgePro, squareOverdriveProjector,
+            sharedStorage
+
+                    ;
 
     public static void load(){
 
@@ -218,6 +223,12 @@ public class TestBlocks{
             size = 2;
             consumeItem(Items.phaseFabric).boost();
             ambientSoundVolume = 0.08f;
+        }};
+
+        sharedStorage = new SharedStorage("shared-storage"){{
+            requirements(Category.effect, ItemStack.with(Items.titanium, 10));
+            size = 1;
+            itemCapacity = 30;
         }};
 
     }

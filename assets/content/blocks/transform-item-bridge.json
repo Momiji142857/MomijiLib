@@ -1,0 +1,20 @@
+{
+  "type": "Momiji-TransformItemBridge",
+  "category": "distribution",
+  "requirements": [
+    {"item": "lead", "amount": 6},
+    {"item": "copper", "amount": 6}
+  ],
+  "fadeIn": false,
+  "moveArrows": false,
+  "speed": 74,
+  "bufferCapacity": 14,
+  "arrowSpacing": 6,
+  "crushFragile": true,
+  "minLinkGap": 2,
+  "maxLinkGap": 3,
+  "itemMap": [
+    "copper:lead",
+    "titanium:metaglass"
+  ]
+}
